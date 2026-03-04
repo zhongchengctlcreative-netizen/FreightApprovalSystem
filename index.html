@@ -1,0 +1,165 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FreightGuard Approval System</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%231e1b4b'/%3E%3Cstop offset='100%25' stop-color='%23312e81'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' rx='20' fill='url(%23g)'/%3E%3Cpath d='M30 25 h 45 v 14 h -31 v 11 h 25 v 14 h -25 v 21 h -14 Z' fill='white'/%3E%3Crect x='35' y='25' width='2' height='14' fill='%231e1b4b' opacity='0.2'/%3E%3Crect x='45' y='25' width='2' height='14' fill='%231e1b4b' opacity='0.2'/%3E%3Crect x='55' y='25' width='2' height='14' fill='%231e1b4b' opacity='0.2'/%3E%3Crect x='65' y='25' width='2' height='14' fill='%231e1b4b' opacity='0.2'/%3E%3Cpath d='M20 85 Q 50 98 80 85' stroke='%236366f1' stroke-width='6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              // Map 'indigo' (the primary brand color) to CSS variables for dynamic theming
+              indigo: {
+                50: 'var(--color-primary-50)',
+                100: 'var(--color-primary-100)',
+                200: 'var(--color-primary-200)',
+                300: 'var(--color-primary-300)',
+                400: 'var(--color-primary-400)',
+                500: 'var(--color-primary-500)',
+                600: 'var(--color-primary-600)',
+                700: 'var(--color-primary-700)',
+                800: 'var(--color-primary-800)',
+                900: 'var(--color-primary-900)',
+                950: 'var(--color-primary-950)',
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+      
+      :root {
+        /* Default Theme (Indigo) Values */
+        --color-primary-50: #eef2ff;
+        --color-primary-100: #e0e7ff;
+        --color-primary-200: #c7d2fe;
+        --color-primary-300: #a5b4fc;
+        --color-primary-400: #818cf8;
+        --color-primary-500: #6366f1;
+        --color-primary-600: #4f46e5;
+        --color-primary-700: #4338ca;
+        --color-primary-800: #3730a3;
+        --color-primary-900: #312e81;
+        --color-primary-950: #1e1b4b;
+      }
+
+      body {
+        font-family: 'Inter', sans-serif;
+        background-color: #f1f5f9;
+      }
+      .custom-scrollbar::-webkit-scrollbar {
+        height: 6px;
+        width: 6px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: #f1f5f9;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 3px;
+      }
+      /* Map container fix */
+      .leaflet-container {
+        z-index: 0; 
+      }
+
+      /* Animations */
+      @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+      .animate-fade-in { animation: fadeIn 0.5s ease-out forwards; }
+      
+      @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+      .animate-fade-in-up { animation: fadeInUp 0.5s ease-out forwards; }
+
+      @keyframes cardFlyIn { 
+        0% { opacity: 0; transform: translateY(40px) scale(0.98); } 
+        100% { opacity: 1; transform: translateY(0) scale(1); } 
+      }
+      .animate-card-fly-in { animation: cardFlyIn 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+
+      .delay-100 { animation-delay: 100ms; }
+      .delay-200 { animation-delay: 200ms; }
+      .delay-300 { animation-delay: 300ms; }
+
+      /* --- PDF GENERATION STYLES --- */
+      
+      /* When generating PDF, hide non-essential UI elements */
+      body.generating-pdf .pdf-hidden {
+        display: none !important;
+      }
+      
+      /* Force display of elements meant for PDF only */
+      body.generating-pdf .pdf-visible {
+        display: block !important;
+      }
+      
+      body.generating-pdf {
+        background-color: white;
+      }
+
+      /* CRITICAL FIX FOR FADED PDF: Disable all animations and force full opacity */
+      body.generating-pdf * {
+        animation: none !important;
+        transition: none !important;
+        opacity: 1 !important;
+      }
+      
+      /* Ensure full width during capture */
+      body.generating-pdf #printable-report {
+        width: 1000px !important; /* Fixed width for consistent PDF scale */
+        margin: 0 auto;
+        padding: 20px;
+        background-color: white;
+      }
+      
+      /* Expand grid to full width */
+      body.generating-pdf .lg\:col-span-2 {
+        grid-column: span 3 / span 3 !important;
+        width: 100% !important;
+      }
+
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.3.1",
+    "react/": "https://esm.sh/react@18.3.1/",
+    "react-dom": "https://esm.sh/react-dom@18.3.1?deps=react@18.3.1",
+    "react-dom/": "https://esm.sh/react-dom@18.3.1/?deps=react@18.3.1",
+    "react-dom/client": "https://esm.sh/react-dom@18.3.1/client?deps=react@18.3.1",
+    "@google/genai": "https://esm.sh/@google/genai@^1.33.0",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.87.3",
+    "@emailjs/browser": "https://esm.sh/@emailjs/browser@^4.4.1",
+    "recharts": "https://esm.sh/recharts@^3.6.0?external=react,react-dom",
+    "lucide-react": "https://esm.sh/lucide-react@0.395.0?external=react",
+    "react-hook-form": "https://esm.sh/react-hook-form@^7.51.0?external=react,react-dom",
+    "@hookform/resolvers/zod": "https://esm.sh/@hookform/resolvers@^3.3.4/zod?external=react,react-dom",
+    "zod": "https://esm.sh/zod@^3.22.4",
+    "react-router-dom": "https://esm.sh/react-router-dom@6.23.1?external=react,react-dom",
+    "@remix-run/router": "https://esm.sh/@remix-run/router@1.16.1",
+    "leaflet": "https://esm.sh/leaflet@1.9.4",
+    "jspdf": "https://esm.sh/jspdf@2.5.1",
+    "html2canvas": "https://esm.sh/html2canvas@1.4.1",
+    "path": "https://esm.sh/path@^0.12.7",
+    "fs": "https://esm.sh/fs@^0.0.1-security",
+    "@tanstack/react-query": "https://esm.sh/@tanstack/react-query@5.28.4?external=react,react-dom",
+    "@tanstack/react-virtual": "https://esm.sh/@tanstack/react-virtual@3.5.0?external=react,react-dom",
+    "@hookform/resolvers/": "https://esm.sh/@hookform/resolvers@^5.2.2/",
+    "vite": "https://esm.sh/vite@^7.3.1",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
+    "browser-image-compression": "https://esm.sh/browser-image-compression@2.0.2"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./index.tsx"></script>
+  </body>
+</html>
