@@ -11,6 +11,7 @@ import UserManagement from './components/UserManagement';
 import LocationManagement from './components/LocationManagement';
 import ForwarderManagement from './components/CarrierManagement';
 import CostRevenuePage from './components/CostRevenuePage';
+import AirFreightCalculator from './components/AirFreightCalculator';
 import WelcomePage from './components/WelcomePage';
 import SettingsPage from './components/SettingsPage';
 import QuarterlyTrendsPage from './components/QuarterlyTrendsPage';
@@ -341,6 +342,7 @@ const App: React.FC = () => {
         } />
         
         <Route path="/financials" element={<CostRevenuePage />} />
+        <Route path="/calculator" element={<AirFreightCalculator />} />
         <Route path="/users" element={<UserManagement onUserUpdate={refreshUsers} currentUser={currentUser} />} />
         <Route path="/locations" element={<LocationManagement key={dataVersion} currentUser={currentUser} />} />
         <Route path="/carriers" element={<ForwarderManagement currentUser={currentUser} />} />

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { LayoutDashboard, List, PlusCircle, Settings, Truck, Database, Users, User as UserIcon, ChevronDown, LogOut, Lock, KeyRound, Map as MapIcon, TrendingUp, Ship, Globe, Bell, CheckCircle, Info, AlertTriangle, Search, Plus, Command, Menu, BarChart3 } from 'lucide-react';
+import { LayoutDashboard, List, PlusCircle, Settings, Truck, Database, Users, User as UserIcon, ChevronDown, LogOut, Lock, KeyRound, Map as MapIcon, TrendingUp, Ship, Globe, Bell, CheckCircle, Info, AlertTriangle, Search, Plus, Command, Menu, BarChart3, Calculator } from 'lucide-react';
 import { User, AppNotification } from '../types';
 import { useUser } from '../contexts/UserContext';
 import { useLocation } from 'react-router-dom';
@@ -37,6 +37,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, adminOnly: false },
     { path: '/trends', label: 'Trends', icon: BarChart3, adminOnly: false },
     { path: '/financials', label: 'Cost vs Revenue', icon: TrendingUp, adminOnly: false },
+    { path: '/calculator', label: 'Air Freight Calculator', icon: Calculator, adminOnly: false },
     { path: '/new', label: 'New Request', icon: PlusCircle, adminOnly: false },
     { path: '/approvals', label: 'Approvals', icon: List, adminOnly: false },
     { path: '/shipments', label: 'Shipment Data', icon: Database, adminOnly: false },
@@ -51,7 +52,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     { path: '/approvals', label: 'Approvals', icon: List },
     { path: '/new', label: 'New', icon: PlusCircle, highlight: true },
     { path: '/shipments', label: 'Data', icon: Database },
-    { path: '/settings', label: 'Settings', icon: Settings },
+    { path: '/calculator', label: 'Calc', icon: Calculator },
   ];
 
   // Poll for notifications - Increased poll time for stability
@@ -174,6 +175,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       case '/dashboard': return 'Overview';
       case '/trends': return 'Trends Analysis';
       case '/financials': return 'Financial Analysis';
+      case '/calculator': return 'Air Freight Calculator';
       case '/new': return 'New Request';
       case '/approvals': return 'Pending Approvals';
       case '/shipments': return 'Shipment Data';
