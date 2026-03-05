@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { Upload, Calculator, Package, Info, AlertCircle, Search, Plus, Trash2, Loader2, CheckCircle, Database, Settings, X, Save, Edit2, Globe } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
+import { destinationService, Destination } from '../services/destinationService';
+import SearchableSelect, { SelectOption } from './SearchableSelect';
 
 interface SkuData {
   partNo: string;
@@ -29,13 +31,21 @@ interface FreightRate {
 
 const AirFreightCalculator: React.FC = () => {
   const [skuDatabase, setSkuDatabase] = useState<SkuData[]>([]);
+  const [skuCount, setSkuCount] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [filteredSkus, setFilteredSkus] = useState<SkuData[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
   const [shipmentItems, setShipmentItems] = useState<ShipmentItem[]>([]);
+  const [inputMode, setInputMode] = useState<'search' | 'paste'>('search');
+  const [pasteText, setPasteText] = useState('');
+  const [pasteQtyText, setPasteQtyText] = useState('');
+  const [isProcessingPaste, setIsProcessingPaste] = useState(false);
+  const [selectedItems, setSelectedItems] = useState<string[]>([]);
 
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -43,8 +53,17 @@ const AirFreightCalculator: React.FC = () => {
   // Rate Modal State
   const [isRateModalOpen, setIsRateModalOpen] = useState(false);
   const [freightRates, setFreightRates] = useState<FreightRate[]>([]);
-  const [editingRate, setEditingRate] = useState<Partial<FreightRate> | null>(null);
+  const [editingDestinationRate, setEditingDestinationRate] = useState<{
+    destination: string;
+    courierRate: number | '';
+    forwarderRate: number | '';
+    courierId?: string;
+    forwarderId?: string;
+    isNew: boolean;
+  } | null>(null);
   const [selectedDestination, setSelectedDestination] = useState<string>('');
+  const [availableDestinations, setAvailableDestinations] = useState<Destination[]>([]);
+  const [rateToDelete, setRateToDelete] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -52,7 +71,17 @@ const AirFreightCalculator: React.FC = () => {
   useEffect(() => {
     fetchSkus();
     fetchRates();
+    fetchDestinations();
   }, []);
+
+  const fetchDestinations = async () => {
+    try {
+      const dests = await destinationService.getAll();
+      setAvailableDestinations(dests);
+    } catch (err) {
+      console.error("Error fetching destinations:", err);
+    }
+  };
 
   const fetchRates = async () => {
     try {
@@ -65,92 +94,131 @@ const AirFreightCalculator: React.FC = () => {
   };
 
   const handleSaveRate = async () => {
-    if (!editingRate?.destination || !editingRate?.shipping_mode || editingRate.rate_per_kg === undefined) {
-      setError("Please fill in all rate fields.");
+    if (!editingDestinationRate?.destination) {
+      setError("Please select a destination.");
       setTimeout(() => setError(null), 3000);
       return;
     }
     try {
-      const payload = {
-        destination: editingRate.destination,
-        shipping_mode: editingRate.shipping_mode,
-        rate_per_kg: editingRate.rate_per_kg,
-        updated_at: new Date().toISOString()
-      };
+      const now = new Date().toISOString();
+      const promises = [];
       
-      if (editingRate.id) {
-        const { error: updateErr } = await supabase.from('freight_rates').update(payload).eq('id', editingRate.id);
-        if (updateErr) throw updateErr;
-      } else {
-        const { error: insertErr } = await supabase.from('freight_rates').insert([payload]);
-        if (insertErr) throw insertErr;
+      // Courier
+      if (editingDestinationRate.courierRate !== '') {
+        const payload = {
+          destination: editingDestinationRate.destination,
+          shipping_mode: 'Courier',
+          rate_per_kg: Number(editingDestinationRate.courierRate),
+          updated_at: now
+        };
+        if (editingDestinationRate.courierId) {
+          promises.push(supabase.from('freight_rates').update(payload).eq('id', editingDestinationRate.courierId));
+        } else {
+          promises.push(supabase.from('freight_rates').insert([payload]));
+        }
+      } else if (editingDestinationRate.courierId) {
+        promises.push(supabase.from('freight_rates').delete().eq('id', editingDestinationRate.courierId));
       }
-      setEditingRate(null);
+
+      // Forwarder
+      if (editingDestinationRate.forwarderRate !== '') {
+        const payload = {
+          destination: editingDestinationRate.destination,
+          shipping_mode: 'Forwarder',
+          rate_per_kg: Number(editingDestinationRate.forwarderRate),
+          updated_at: now
+        };
+        if (editingDestinationRate.forwarderId) {
+          promises.push(supabase.from('freight_rates').update(payload).eq('id', editingDestinationRate.forwarderId));
+        } else {
+          promises.push(supabase.from('freight_rates').insert([payload]));
+        }
+      } else if (editingDestinationRate.forwarderId) {
+        promises.push(supabase.from('freight_rates').delete().eq('id', editingDestinationRate.forwarderId));
+      }
+
+      await Promise.all(promises);
+
+      setEditingDestinationRate(null);
       await fetchRates();
-      setSuccessMsg("Freight rate saved successfully.");
+      setSuccessMsg("Freight rates saved successfully.");
       setTimeout(() => setSuccessMsg(null), 3000);
     } catch (err: any) {
-      setError(err.message || "Failed to save rate.");
+      setError(err.message || "Failed to save rates.");
       setTimeout(() => setError(null), 3000);
     }
   };
 
-  const handleDeleteRate = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this rate?")) return;
+  const handleDeleteRate = async () => {
+    if (!rateToDelete) return;
     try {
-      const { error } = await supabase.from('freight_rates').delete().eq('id', id);
+      const { error } = await supabase.from('freight_rates').delete().eq('destination', rateToDelete);
       if (error) throw error;
       await fetchRates();
+      setRateToDelete(null);
     } catch (err: any) {
       setError(err.message);
       setTimeout(() => setError(null), 3000);
+      setRateToDelete(null);
     }
   };
 
   const fetchSkus = async () => {
     setIsLoading(true);
     try {
-      let allData: any[] = [];
-      let hasMore = true;
-      let page = 0;
-      const pageSize = 1000;
-
-      while (hasMore) {
-        const { data, error } = await supabase
-          .from('sku_dimensions')
-          .select('*')
-          .range(page * pageSize, (page + 1) * pageSize - 1);
-        
-        if (error) throw error;
-        
-        if (data && data.length > 0) {
-          allData = [...allData, ...data];
-          page++;
-          if (data.length < pageSize) hasMore = false;
-        } else {
-          hasMore = false;
-        }
-      }
+      const { count, error } = await supabase
+        .from('sku_dimensions')
+        .select('*', { count: 'exact', head: true });
       
-      if (allData.length > 0) {
-        const formatted = allData.map(d => ({
-          partNo: d.part_no,
-          description: d.description,
-          l: Number(d.length_cm) || 0,
-          w: Number(d.width_cm) || 0,
-          h: Number(d.height_cm) || 0,
-          qtyPerCtn: Number(d.qty_per_ctn) || 1,
-          gwPerCtn: Number(d.gw_per_ctn) || 0
-        }));
-        setSkuDatabase(formatted);
-      }
+      if (error) throw error;
+      setSkuCount(count || 0);
     } catch (err: any) {
-      console.error("Error fetching SKUs:", err);
-      setError("Failed to load SKU database from Supabase.");
+      console.error("Error fetching SKU count:", err);
+      setError("Failed to load SKU database count.");
     } finally {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    const searchSkus = async () => {
+      if (!searchQuery.trim()) {
+        setFilteredSkus([]);
+        return;
+      }
+
+      setIsSearching(true);
+      try {
+        const { data, error } = await supabase
+          .from('sku_dimensions')
+          .select('*')
+          .or(`part_no.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%`)
+          .limit(10);
+
+        if (error) throw error;
+
+        if (data) {
+          const formatted = data.map(d => ({
+            partNo: d.part_no,
+            description: d.description,
+            l: Number(d.length_cm) || 0,
+            w: Number(d.width_cm) || 0,
+            h: Number(d.height_cm) || 0,
+            qtyPerCtn: Number(d.qty_per_ctn) || 1,
+            gwPerCtn: Number(d.gw_per_ctn) || 0
+          }));
+          setFilteredSkus(formatted);
+        }
+      } catch (err) {
+        console.error("Error searching SKUs:", err);
+      } finally {
+        setIsSearching(false);
+      }
+    };
+
+    const debounceTimer = setTimeout(searchSkus, 300);
+    return () => clearTimeout(debounceTimer);
+  }, [searchQuery]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -278,6 +346,121 @@ const AirFreightCalculator: React.FC = () => {
     setSearchQuery('');
   };
 
+  const handleProcessPaste = async () => {
+    if (!pasteText.trim()) return;
+    setIsProcessingPaste(true);
+    
+    // Parse lines
+    const rawSkuLines = pasteText.split('\n');
+    const rawQtyLines = pasteQtyText.split('\n');
+    const parsedItems: { partNo: string, qty: number }[] = [];
+    
+    for (let i = 0; i < rawSkuLines.length; i++) {
+      const line = rawSkuLines[i].trim();
+      if (!line) continue;
+
+      // Split by tab, comma, or multiple spaces
+      const parts = line.split(/\t|,|\s{2,}/);
+      const partNo = parts[0].trim();
+      let qty = 1;
+
+      if (parts.length > 1) {
+        const parsedQty = parseInt(parts[1].trim(), 10);
+        if (!isNaN(parsedQty) && parsedQty > 0) {
+          qty = parsedQty;
+        }
+      } else if (rawQtyLines[i]) {
+        const parsedQty = parseInt(rawQtyLines[i].trim(), 10);
+        if (!isNaN(parsedQty) && parsedQty > 0) {
+          qty = parsedQty;
+        }
+      }
+
+      if (partNo) {
+        parsedItems.push({ partNo, qty });
+      }
+    }
+
+    if (parsedItems.length === 0) {
+      setIsProcessingPaste(false);
+      return;
+    }
+
+    // Query Supabase for these SKUs
+    const partNos = parsedItems.map(item => item.partNo);
+    
+    try {
+      const chunkSize = 100;
+      let allFoundSkus: any[] = [];
+      
+      for (let i = 0; i < partNos.length; i += chunkSize) {
+        const chunk = partNos.slice(i, i + chunkSize);
+        const { data, error } = await supabase
+          .from('sku_dimensions')
+          .select('*')
+          .in('part_no', chunk);
+          
+        if (error) throw error;
+        if (data) {
+          allFoundSkus = [...allFoundSkus, ...data];
+        }
+      }
+
+      const formattedSkus = allFoundSkus.map(d => ({
+        partNo: d.part_no,
+        description: d.description,
+        l: Number(d.length_cm) || 0,
+        w: Number(d.width_cm) || 0,
+        h: Number(d.height_cm) || 0,
+        qtyPerCtn: Number(d.qty_per_ctn) || 1,
+        gwPerCtn: Number(d.gw_per_ctn) || 0
+      }));
+
+      // Add to shipment items
+      const newShipmentItems = [...shipmentItems];
+      let addedCount = 0;
+      let notFoundCount = 0;
+
+      parsedItems.forEach(item => {
+        const foundSku = formattedSkus.find(s => s.partNo.toLowerCase() === item.partNo.toLowerCase());
+        if (foundSku) {
+          const existingIdx = newShipmentItems.findIndex(i => i.sku.partNo === foundSku.partNo);
+          if (existingIdx >= 0) {
+            newShipmentItems[existingIdx].qty += item.qty;
+          } else {
+            newShipmentItems.push({
+              id: Math.random().toString(36).substring(2, 9),
+              sku: foundSku,
+              qty: item.qty
+            });
+          }
+          addedCount++;
+        } else {
+          notFoundCount++;
+        }
+      });
+
+      setShipmentItems(newShipmentItems);
+      setPasteText('');
+      setPasteQtyText('');
+      
+      if (notFoundCount > 0) {
+        setError(`Added ${addedCount} SKUs. ${notFoundCount} SKUs were not found in the database.`);
+        setTimeout(() => setError(null), 5000);
+      } else {
+        setSuccessMsg(`Successfully added ${addedCount} SKUs.`);
+        setTimeout(() => setSuccessMsg(null), 3000);
+      }
+      
+    } catch (err: any) {
+      console.error("Error processing pasted SKUs:", err);
+      setError("Failed to process pasted SKUs.");
+      setTimeout(() => setError(null), 3000);
+    } finally {
+      setIsProcessingPaste(false);
+    }
+  };
+
   const updateItemQty = (id: string, qty: number) => {
     if (qty < 0) return;
     setShipmentItems(prev => prev.map(item => item.id === id ? { ...item, qty } : item));
@@ -344,14 +527,6 @@ const AirFreightCalculator: React.FC = () => {
     };
   };
 
-  // Filter SKUs for search
-  const filteredSkus = searchQuery.trim() === '' 
-    ? [] 
-    : skuDatabase.filter(s => 
-        s.partNo.toLowerCase().includes(searchQuery.toLowerCase()) || 
-        s.description.toLowerCase().includes(searchQuery.toLowerCase())
-      ).slice(0, 10); // Limit to 10 results
-
   // Calculate Totals
   const totals = shipmentItems.reduce((acc, item) => {
     const c = calculateItem(item.sku, item.qty);
@@ -368,12 +543,59 @@ const AirFreightCalculator: React.FC = () => {
   const palletChargeable = Math.max(totals.palletGross, totals.palletVol);
   
   const uniqueDestinations = Array.from(new Set(freightRates.map(r => r.destination))).sort();
+  // Also include available destinations that might not have rates yet
+  const allDestinationsForDropdown = Array.from(new Set([
+    ...uniqueDestinations,
+    ...availableDestinations.map(d => d.code)
+  ])).sort();
+
+  const destinationOptions: SelectOption[] = allDestinationsForDropdown.map(dest => {
+    const matchedDest = availableDestinations.find(d => d.code === dest || d.description === dest);
+    return {
+      label: matchedDest ? matchedDest.description || matchedDest.code : dest,
+      value: dest,
+      subLabel: matchedDest ? matchedDest.code : undefined
+    };
+  });
+
   const ratesForDestination = freightRates.filter(r => r.destination === selectedDestination);
   const cheapestRate = ratesForDestination.length > 0 
     ? ratesForDestination.reduce((min, r) => r.rate_per_kg < min.rate_per_kg ? r : min, ratesForDestination[0])
     : null;
 
   const rate = cheapestRate ? cheapestRate.rate_per_kg : 0;
+
+  const groupedRates = React.useMemo(() => {
+    const grouped: Record<string, {
+      destination: string;
+      courierRate?: number;
+      forwarderRate?: number;
+      courierId?: string;
+      forwarderId?: string;
+      updated_at: string;
+    }> = {};
+
+    freightRates.forEach(rate => {
+      if (!grouped[rate.destination]) {
+        grouped[rate.destination] = {
+          destination: rate.destination,
+          updated_at: rate.updated_at
+        };
+      }
+      if (rate.shipping_mode === 'Courier') {
+        grouped[rate.destination].courierRate = rate.rate_per_kg;
+        grouped[rate.destination].courierId = rate.id;
+      } else if (rate.shipping_mode === 'Forwarder') {
+        grouped[rate.destination].forwarderRate = rate.rate_per_kg;
+        grouped[rate.destination].forwarderId = rate.id;
+      }
+      if (new Date(rate.updated_at) > new Date(grouped[rate.destination].updated_at)) {
+        grouped[rate.destination].updated_at = rate.updated_at;
+      }
+    });
+
+    return Object.values(grouped).sort((a, b) => a.destination.localeCompare(b.destination));
+  }, [freightRates]);
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-12">
@@ -399,7 +621,7 @@ const AirFreightCalculator: React.FC = () => {
               {isLoading ? (
                 <><Loader2 size={12} className="animate-spin"/> Loading database...</>
               ) : (
-                <>{skuDatabase.length} SKUs available for calculation</>
+                <>{skuCount} SKUs available for calculation</>
               )}
             </div>
           </div>
@@ -446,58 +668,113 @@ const AirFreightCalculator: React.FC = () => {
       )}
 
       {/* Calculator Section */}
-      <div className={`bg-white p-6 rounded-2xl shadow-sm border border-slate-200 transition-opacity ${skuDatabase.length === 0 ? 'opacity-50 pointer-events-none' : ''}`}>
+      <div className={`bg-white p-6 rounded-2xl shadow-sm border border-slate-200 transition-opacity ${skuCount === 0 && !isLoading ? 'opacity-50 pointer-events-none' : ''}`}>
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-bold text-slate-800">Build Shipment</h2>
           <div className="flex items-center gap-2">
             <label className="text-xs font-bold text-slate-500 uppercase">Destination</label>
-            <select 
-              value={selectedDestination}
-              onChange={(e) => setSelectedDestination(e.target.value)}
-              className="w-56 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-medium text-slate-700"
-            >
-              <option value="">Select Destination...</option>
-              {uniqueDestinations.map(dest => (
-                <option key={dest} value={dest}>{dest}</option>
-              ))}
-            </select>
+            <div className="w-64">
+              <SearchableSelect 
+                label=""
+                value={selectedDestination ? destinationOptions.find(o => o.value === selectedDestination)?.label || selectedDestination : ''}
+                selectedValue={selectedDestination}
+                options={destinationOptions}
+                onChange={(val) => setSelectedDestination(val)}
+                placeholder="Select Destination..."
+                searchPlaceholder="Search destinations..."
+              />
+            </div>
           </div>
         </div>
         
-        {/* Search Bar */}
-        <div className="relative mb-6 z-20">
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-            <input 
-              type="text" 
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-sm"
-              placeholder="Search SKU by Part No or Description to add to shipment..."
-            />
+        {/* Search Bar / Bulk Paste */}
+        <div className="mb-6 z-20">
+          <div className="flex gap-2 mb-2">
+            <button 
+              onClick={() => setInputMode('search')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${inputMode === 'search' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+            >
+              Search SKUs
+            </button>
+            <button 
+              onClick={() => setInputMode('paste')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${inputMode === 'paste' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+            >
+              Bulk Paste
+            </button>
           </div>
-          
-          {searchQuery && (
-            <div className="absolute top-full left-0 right-0 bg-white shadow-xl border border-slate-200 rounded-xl mt-2 max-h-80 overflow-y-auto animate-fade-in-up">
-              {filteredSkus.length > 0 ? (
-                filteredSkus.map(sku => (
-                  <div 
-                    key={sku.partNo} 
-                    onClick={() => addSkuToShipment(sku)} 
-                    className="p-3 hover:bg-indigo-50 cursor-pointer border-b border-slate-100 flex justify-between items-center group transition-colors"
-                  >
-                    <div>
-                      <div className="font-bold text-slate-800">{sku.partNo}</div>
-                      <div className="text-xs text-slate-500 truncate max-w-md">{sku.description}</div>
+
+          {inputMode === 'search' ? (
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+              <input 
+                type="text" 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-sm"
+                placeholder="Search SKU by Part No or Description to add to shipment..."
+              />
+              
+              {searchQuery && (
+                <div className="absolute top-full left-0 right-0 bg-white shadow-xl border border-slate-200 rounded-xl mt-2 max-h-80 overflow-y-auto animate-fade-in-up">
+                  {isSearching ? (
+                    <div className="p-4 text-center text-sm text-slate-500 flex items-center justify-center gap-2">
+                      <Loader2 size={16} className="animate-spin" /> Searching...
                     </div>
-                    <div className="text-xs text-slate-400 group-hover:text-indigo-600 flex items-center gap-1 font-medium">
-                      <Plus size={14} /> Add
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="p-4 text-center text-sm text-slate-500">No SKUs found matching "{searchQuery}"</div>
+                  ) : filteredSkus.length > 0 ? (
+                    filteredSkus.map(sku => (
+                      <div 
+                        key={sku.partNo} 
+                        onClick={() => addSkuToShipment(sku)} 
+                        className="p-3 hover:bg-indigo-50 cursor-pointer border-b border-slate-100 flex justify-between items-center group transition-colors"
+                      >
+                        <div>
+                          <div className="font-bold text-slate-800">{sku.partNo}</div>
+                          <div className="text-xs text-slate-500 truncate max-w-md">{sku.description}</div>
+                        </div>
+                        <div className="text-xs text-slate-400 group-hover:text-indigo-600 flex items-center gap-1 font-medium">
+                          <Plus size={14} /> Add
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-4 text-center text-sm text-slate-500">No SKUs found matching "{searchQuery}"</div>
+                  )}
+                </div>
               )}
+            </div>
+          ) : (
+            <div className="relative">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">SKUs</label>
+                  <textarea
+                    value={pasteText}
+                    onChange={(e) => setPasteText(e.target.value)}
+                    placeholder="Paste SKUs here (e.g. from Excel)"
+                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-sm min-h-[120px] font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Quantities (Optional)</label>
+                  <textarea
+                    value={pasteQtyText}
+                    onChange={(e) => setPasteQtyText(e.target.value)}
+                    placeholder="Paste Quantities here to match SKUs line-by-line"
+                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-sm min-h-[120px] font-mono"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end mt-4">
+                <button
+                  onClick={handleProcessPaste}
+                  disabled={isProcessingPaste || !pasteText.trim()}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-sm shadow-sm transition-all flex items-center gap-2 disabled:opacity-50"
+                >
+                  {isProcessingPaste ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                  {isProcessingPaste ? 'Processing...' : 'Add Pasted SKUs'}
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -505,10 +782,39 @@ const AirFreightCalculator: React.FC = () => {
         {/* Shipment Table */}
         {shipmentItems.length > 0 ? (
           <div className="border border-slate-200 rounded-xl overflow-hidden mb-6">
+            {selectedItems.length > 0 && (
+              <div className="bg-indigo-50 p-3 border-b border-slate-200 flex justify-between items-center">
+                <span className="text-sm font-bold text-indigo-700">{selectedItems.length} items selected</span>
+                <button 
+                  onClick={() => {
+                    setShipmentItems(shipmentItems.filter(i => !selectedItems.includes(i.id)));
+                    setSelectedItems([]);
+                  }}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-red-100 text-red-700 hover:bg-red-200 rounded-lg text-xs font-bold transition-colors"
+                >
+                  <Trash2 size={14} /> Delete Selected
+                </button>
+              </div>
+            )}
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse whitespace-nowrap">
                 <thead className="bg-slate-50 border-b border-slate-200">
                   <tr className="text-[11px] uppercase tracking-wider text-slate-500 font-bold">
+                    <th className="px-4 py-3 w-10 text-center">
+                      <input 
+                        type="checkbox" 
+                        checked={selectedItems.length === shipmentItems.length && shipmentItems.length > 0}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedItems(shipmentItems.map(i => i.id));
+                          } else {
+                            setSelectedItems([]);
+                          }
+                        }}
+                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                    </th>
+                    <th className="px-4 py-3 w-12 text-center">#</th>
                     <th className="px-4 py-3">Part No</th>
                     <th className="px-4 py-3">Description</th>
                     <th className="px-4 py-3">Dimensions (cm)</th>
@@ -521,10 +827,25 @@ const AirFreightCalculator: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {shipmentItems.map(item => {
+                  {shipmentItems.map((item, index) => {
                     const calc = calculateItem(item.sku, item.qty);
                     return (
                       <tr key={item.id} className="hover:bg-slate-50/50 transition-colors text-sm">
+                        <td className="px-4 py-3 text-center">
+                          <input 
+                            type="checkbox" 
+                            checked={selectedItems.includes(item.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedItems([...selectedItems, item.id]);
+                              } else {
+                                setSelectedItems(selectedItems.filter(id => id !== item.id));
+                              }
+                            }}
+                            className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                          />
+                        </td>
+                        <td className="px-4 py-3 text-center text-slate-400 font-mono text-xs">{index + 1}</td>
                         <td className="px-4 py-3 font-bold text-slate-800">{item.sku.partNo}</td>
                         <td className="px-4 py-3 text-slate-600 max-w-[200px] truncate" title={item.sku.description}>{item.sku.description}</td>
                         <td className="px-4 py-3 text-slate-500 text-xs">{item.sku.l} x {item.sku.w} x {item.sku.h}</td>
@@ -671,43 +992,46 @@ const AirFreightCalculator: React.FC = () => {
               <h3 className="font-bold text-slate-800 flex items-center gap-2">
                 <Globe size={18} className="text-indigo-600" /> Freight Rates Management
               </h3>
-              <button onClick={() => { setIsRateModalOpen(false); setEditingRate(null); }} className="text-slate-400 hover:text-slate-600 transition-colors">
+              <button onClick={() => { setIsRateModalOpen(false); setEditingDestinationRate(null); }} className="text-slate-400 hover:text-slate-600 transition-colors">
                 <X size={20} />
               </button>
             </div>
             
             <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50">
-              {editingRate ? (
+              {editingDestinationRate ? (
                 <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm mb-6 animate-fade-in-up">
-                  <h4 className="font-bold text-slate-800 mb-4">{editingRate.id ? 'Edit Rate' : 'Add New Rate'}</h4>
+                  <h4 className="font-bold text-slate-800 mb-4">{editingDestinationRate.isNew ? 'Add New Rate' : 'Edit Rate'}</h4>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                     <div>
                       <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Destination</label>
+                      <SearchableSelect 
+                        label=""
+                        value={editingDestinationRate.destination ? destinationOptions.find(o => o.value === editingDestinationRate.destination)?.label || editingDestinationRate.destination : ''}
+                        selectedValue={editingDestinationRate.destination}
+                        options={destinationOptions}
+                        onChange={(val) => setEditingDestinationRate({...editingDestinationRate, destination: val})}
+                        placeholder="Select Destination..."
+                        searchPlaceholder="Search destinations..."
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Courier Rate / KG ($)</label>
                       <input 
-                        type="text" 
-                        value={editingRate.destination || ''}
-                        onChange={(e) => setEditingRate({...editingRate, destination: e.target.value})}
-                        placeholder="e.g. United States"
+                        type="number" 
+                        value={editingDestinationRate.courierRate}
+                        onChange={(e) => setEditingDestinationRate({...editingDestinationRate, courierRate: e.target.value === '' ? '' : Number(e.target.value)})}
+                        placeholder="0.00"
+                        step="0.01"
+                        min="0"
                         className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Mode</label>
-                      <select 
-                        value={editingRate.shipping_mode || 'Courier'}
-                        onChange={(e) => setEditingRate({...editingRate, shipping_mode: e.target.value})}
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
-                      >
-                        <option value="Courier">Courier</option>
-                        <option value="Forwarder">Forwarder</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Rate per KG ($)</label>
+                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Forwarder Rate / KG ($)</label>
                       <input 
                         type="number" 
-                        value={editingRate.rate_per_kg === undefined ? '' : editingRate.rate_per_kg}
-                        onChange={(e) => setEditingRate({...editingRate, rate_per_kg: e.target.value === '' ? undefined : Number(e.target.value)})}
+                        value={editingDestinationRate.forwarderRate}
+                        onChange={(e) => setEditingDestinationRate({...editingDestinationRate, forwarderRate: e.target.value === '' ? '' : Number(e.target.value)})}
                         placeholder="0.00"
                         step="0.01"
                         min="0"
@@ -717,7 +1041,7 @@ const AirFreightCalculator: React.FC = () => {
                   </div>
                   <div className="flex justify-end gap-2">
                     <button 
-                      onClick={() => setEditingRate(null)}
+                      onClick={() => setEditingDestinationRate(null)}
                       className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold rounded-lg text-sm transition-all"
                     >
                       Cancel
@@ -726,17 +1050,17 @@ const AirFreightCalculator: React.FC = () => {
                       onClick={handleSaveRate}
                       className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-sm shadow-sm transition-all flex items-center gap-2"
                     >
-                      <Save size={14} /> Save Rate
+                      <Save size={14} /> Save Rates
                     </button>
                   </div>
                 </div>
               ) : (
                 <div className="flex justify-end mb-4">
                   <button 
-                    onClick={() => setEditingRate({ shipping_mode: 'Courier' })}
+                    onClick={() => setEditingDestinationRate({ destination: '', courierRate: '', forwarderRate: '', isNew: true })}
                     className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-sm shadow-sm transition-all"
                   >
-                    <Plus size={16} /> Add New Rate
+                    <Plus size={16} /> Add New Rates
                   </button>
                 </div>
               )}
@@ -746,30 +1070,43 @@ const AirFreightCalculator: React.FC = () => {
                   <thead className="bg-slate-50 border-b border-slate-200">
                     <tr className="text-[11px] uppercase tracking-wider text-slate-500 font-bold">
                       <th className="px-4 py-3">Destination</th>
-                      <th className="px-4 py-3">Mode</th>
-                      <th className="px-4 py-3 text-right">Rate / KG</th>
+                      <th className="px-4 py-3 text-right">Courier Rate / KG</th>
+                      <th className="px-4 py-3 text-right">Forwarder Rate / KG</th>
                       <th className="px-4 py-3">Last Updated</th>
                       <th className="px-4 py-3 text-center">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {freightRates.length > 0 ? (
-                      freightRates.map(rate => (
-                        <tr key={rate.id} className="hover:bg-slate-50/50 transition-colors text-sm">
-                          <td className="px-4 py-3 font-bold text-slate-800">{rate.destination}</td>
-                          <td className="px-4 py-3 text-slate-600">
-                            <span className={`px-2 py-1 rounded-md text-xs font-bold ${rate.shipping_mode === 'Courier' ? 'bg-blue-50 text-blue-700' : 'bg-emerald-50 text-emerald-700'}`}>
-                              {rate.shipping_mode}
-                            </span>
+                    {groupedRates.length > 0 ? (
+                      groupedRates.map(group => (
+                        <tr key={group.destination} className="hover:bg-slate-50/50 transition-colors text-sm">
+                          <td className="px-4 py-3 font-bold text-slate-800">{group.destination}</td>
+                          <td className="px-4 py-3 text-right font-bold text-slate-700">
+                            {group.courierRate !== undefined ? `$${group.courierRate.toFixed(2)}` : '-'}
                           </td>
-                          <td className="px-4 py-3 text-right font-bold text-slate-700">${rate.rate_per_kg.toFixed(2)}</td>
-                          <td className="px-4 py-3 text-slate-500 text-xs">{new Date(rate.updated_at).toLocaleDateString()}</td>
+                          <td className="px-4 py-3 text-right font-bold text-slate-700">
+                            {group.forwarderRate !== undefined ? `$${group.forwarderRate.toFixed(2)}` : '-'}
+                          </td>
+                          <td className="px-4 py-3 text-slate-500 text-xs">{new Date(group.updated_at).toLocaleDateString()}</td>
                           <td className="px-4 py-3 text-center">
                             <div className="flex items-center justify-center gap-2">
-                              <button onClick={() => setEditingRate(rate)} className="text-slate-400 hover:text-indigo-600 transition-colors p-1 rounded hover:bg-indigo-50">
+                              <button 
+                                onClick={() => setEditingDestinationRate({
+                                  destination: group.destination,
+                                  courierRate: group.courierRate ?? '',
+                                  forwarderRate: group.forwarderRate ?? '',
+                                  courierId: group.courierId,
+                                  forwarderId: group.forwarderId,
+                                  isNew: false
+                                })} 
+                                className="text-slate-400 hover:text-indigo-600 transition-colors p-1 rounded hover:bg-indigo-50"
+                              >
                                 <Edit2 size={14}/>
                               </button>
-                              <button onClick={() => handleDeleteRate(rate.id)} className="text-slate-400 hover:text-red-600 transition-colors p-1 rounded hover:bg-red-50">
+                              <button 
+                                onClick={() => setRateToDelete(group.destination)} 
+                                className="text-slate-400 hover:text-red-600 transition-colors p-1 rounded hover:bg-red-50"
+                              >
                                 <Trash2 size={14}/>
                               </button>
                             </div>
@@ -779,12 +1116,43 @@ const AirFreightCalculator: React.FC = () => {
                     ) : (
                       <tr>
                         <td colSpan={5} className="px-4 py-8 text-center text-slate-500 text-sm">
-                          No freight rates configured. Click "Add New Rate" to get started.
+                          No freight rates configured. Click "Add New Rates" to get started.
                         </td>
                       </tr>
                     )}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {rateToDelete && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-fade-in-up">
+            <div className="p-6">
+              <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center mb-4 mx-auto">
+                <AlertCircle size={24} />
+              </div>
+              <h3 className="text-lg font-bold text-slate-800 text-center mb-2">Delete Freight Rates</h3>
+              <p className="text-slate-500 text-center text-sm mb-6">
+                Are you sure you want to delete all freight rates for <strong>{rateToDelete}</strong>? This action cannot be undone.
+              </p>
+              <div className="flex justify-center gap-3">
+                <button 
+                  onClick={() => setRateToDelete(null)}
+                  className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold rounded-lg text-sm transition-all"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={handleDeleteRate}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg text-sm shadow-sm transition-all flex items-center gap-2"
+                >
+                  <Trash2 size={14} /> Delete
+                </button>
               </div>
             </div>
           </div>

@@ -27,7 +27,7 @@ const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <HashRouter>
+      <HashRouter future={{ v7_relativeSplatPath: true }}>
         <ToastProvider>
           <ThemeProvider>
             <UserProvider>

@@ -1,12 +1,15 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { LayoutDashboard, List, PlusCircle, Settings, Truck, Database, Users, User as UserIcon, ChevronDown, LogOut, Lock, KeyRound, Map as MapIcon, TrendingUp, Ship, Globe, Bell, CheckCircle, Info, AlertTriangle, Search, Plus, Command, Menu, BarChart3, Calculator } from 'lucide-react';
+import { LayoutDashboard, List, PlusCircle, Settings, Truck, Database, Users, User as UserIcon, ChevronDown, LogOut, Lock, KeyRound, Map as MapIcon, TrendingUp, Ship, Globe, Bell, CheckCircle, Info, AlertTriangle, Search, Plus, Command, Menu, BarChart3, Calculator, Calendar } from 'lucide-react';
 import { User, AppNotification } from '../types';
 import { useUser } from '../contexts/UserContext';
 import { useLocation } from 'react-router-dom';
 import { useNavigationBlocker } from '../contexts/NavigationBlockerContext';
 import VersionChecker from './VersionChecker';
 import { notificationService } from '../services/notificationService';
+import { supabase } from '../services/supabaseClient';
+import { getDaysRemaining } from '../services/freightHelpers';
+import { isFuture, parseISO } from 'date-fns';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -22,6 +25,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const notifRef = useRef<HTMLDivElement>(null);
+
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [upcomingArrivals, setUpcomingArrivals] = useState<any[]>([]);
+  const calendarRef = useRef<HTMLDivElement>(null);
+  const calendarRefDesktop = useRef<HTMLDivElement>(null);
   
   // Global Search Ref
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -36,6 +44,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const navItems = [
     { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, adminOnly: false },
     { path: '/trends', label: 'Trends', icon: BarChart3, adminOnly: false },
+    { path: '/calendar', label: 'Calendar', icon: Calendar, adminOnly: false },
     { path: '/financials', label: 'Cost vs Revenue', icon: TrendingUp, adminOnly: false },
     { path: '/calculator', label: 'Air Freight Calculator', icon: Calculator, adminOnly: false },
     { path: '/new', label: 'New Request', icon: PlusCircle, adminOnly: false },
@@ -75,9 +84,39 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
               setShowNotifications(false);
           }
+          if (calendarRef.current && !calendarRef.current.contains(event.target as Node) && 
+              calendarRefDesktop.current && !calendarRefDesktop.current.contains(event.target as Node)) {
+              setShowCalendar(false);
+          }
       };
       document.addEventListener('mousedown', handleClickOutside);
       return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    const fetchUpcomingArrivals = async () => {
+      try {
+        const today = new Date().toISOString();
+        const { data, error } = await supabase
+          .from('freight_raw_full')
+          .select('id, vessel_name, eta, ata, destination, destination_code')
+          .gte('eta', today)
+          .neq('status', 'COMPLETED')
+          .neq('status', 'DELIVERED')
+          .neq('status', 'CANCELLED')
+          .order('eta', { ascending: true })
+          .limit(10);
+
+        if (error) throw error;
+        setUpcomingArrivals(data || []);
+      } catch (err) {
+        console.error("Error fetching upcoming arrivals:", err);
+      }
+    };
+
+    fetchUpcomingArrivals();
+    const interval = setInterval(fetchUpcomingArrivals, 60000); // 1 min poll
+    return () => clearInterval(interval);
   }, []);
 
   // Keyboard Shortcut for Search (Cmd+K / Ctrl+K)
@@ -309,6 +348,46 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
            <Truck size={20} className="text-indigo-400" /> FreightGuard
          </div>
          <div className="flex gap-4 items-center">
+           {/* Calendar Mobile */}
+           <div className="relative" ref={calendarRef}>
+               <button onClick={() => setShowCalendar(!showCalendar)} className="text-slate-400 hover:text-white relative p-1">
+                   <Calendar size={22} />
+                   {upcomingArrivals.length > 0 && <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-indigo-500 rounded-full border-2 border-slate-900"></span>}
+               </button>
+               {showCalendar && (
+                   <div className="absolute top-full right-0 mt-2 w-72 bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden z-[60] animate-fade-in-up origin-top-right">
+                       <div className="p-3 border-b border-slate-100 bg-slate-50">
+                           <h4 className="font-bold text-slate-800 text-sm">Upcoming Arrivals</h4>
+                       </div>
+                       <div className="max-h-64 overflow-y-auto custom-scrollbar">
+                           {upcomingArrivals.length > 0 ? upcomingArrivals.map(arr => (
+                               <div key={arr.id} onClick={() => { navigateWithCheck(`/shipments/${arr.id}`); setShowCalendar(false); }} className="p-3 border-b border-slate-100 hover:bg-slate-50 cursor-pointer">
+                                   <div className="flex gap-2">
+                                       <div className="mt-0.5"><Ship size={16} className="text-indigo-500" /></div>
+                                       <div className="min-w-0">
+                                           <p className="text-xs font-semibold truncate text-slate-900">{arr.vessel_name || 'Unknown Vessel'}</p>
+                                           <p className="text-[10px] text-slate-500 mt-0.5">Dest: {arr.destination_code || arr.destination || 'N/A'}</p>
+                                           <p className="text-[10px] font-bold mt-1">
+                                               {arr.ata && !isFuture(parseISO(arr.ata)) ? (
+                                                   <span className="text-emerald-600">Arrived: {new Date(arr.ata).toLocaleDateString()} <span className="text-slate-400 font-normal ml-1">{getDaysRemaining(arr.ata)}</span></span>
+                                               ) : (
+                                                   <span className="text-indigo-600">ETA: {new Date(arr.ata || arr.eta).toLocaleDateString()} <span className="text-slate-400 font-normal ml-1">{getDaysRemaining(arr.ata || arr.eta)}</span></span>
+                                               )}
+                                           </p>
+                                       </div>
+                                   </div>
+                               </div>
+                           )) : <div className="p-6 text-center text-xs text-slate-400">No upcoming arrivals</div>}
+                       </div>
+                       <div className="p-2 border-t border-slate-100 bg-slate-50 text-center">
+                           <button onClick={() => { navigateWithCheck('/calendar'); setShowCalendar(false); }} className="text-xs font-bold text-indigo-600 hover:text-indigo-800 w-full py-1">
+                               View Full Calendar
+                           </button>
+                       </div>
+                   </div>
+               )}
+           </div>
+
            {/* Notification Bell Mobile */}
            <div className="relative" ref={notifRef}>
                <button onClick={() => setShowNotifications(!showNotifications)} className="text-slate-400 hover:text-white relative p-1">
@@ -421,6 +500,56 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                </button>
 
                <div className="h-6 w-px bg-slate-200 mx-1"></div>
+
+               {/* Calendar Desktop */}
+               <div className="relative" ref={calendarRefDesktop}>
+                   <button onClick={() => setShowCalendar(!showCalendar)} className="text-slate-400 hover:text-indigo-600 relative p-2 bg-white rounded-full shadow-sm border border-slate-200 transition-all hover:shadow-md active:scale-95">
+                       <Calendar size={20} />
+                       {upcomingArrivals.length > 0 && (
+                           <span className="absolute -top-1 -right-1 w-5 h-5 bg-indigo-500 rounded-full border-2 border-white text-[10px] font-bold text-white flex items-center justify-center">
+                               {upcomingArrivals.length}
+                           </span>
+                       )}
+                   </button>
+                   {showCalendar && (
+                       <div className="absolute top-full right-0 mt-3 w-80 bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden z-[60] animate-fade-in-up origin-top-right">
+                           <div className="p-3 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                               <h4 className="font-bold text-slate-800 text-sm">Upcoming Arrivals</h4>
+                               <span className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-bold">Next 7 Days</span>
+                           </div>
+                           <div className="max-h-80 overflow-y-auto custom-scrollbar">
+                               {upcomingArrivals.length > 0 ? upcomingArrivals.map(arr => (
+                                   <div key={arr.id} onClick={() => { navigateWithCheck(`/shipments/${arr.id}`); setShowCalendar(false); }} className="p-3 border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors group">
+                                       <div className="flex gap-3">
+                                           <div className="mt-0.5 shrink-0 bg-indigo-50 p-1.5 rounded-lg group-hover:bg-indigo-100 transition-colors">
+                                               <Ship size={16} className="text-indigo-600" />
+                                           </div>
+                                           <div className="flex-1 min-w-0">
+                                               <p className="text-xs font-bold truncate text-slate-800 group-hover:text-indigo-700 transition-colors">{arr.vessel_name || 'Unknown Vessel'}</p>
+                                               <div className="flex items-center gap-2 mt-1">
+                                                   <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">Dest: {arr.destination_code || arr.destination || 'N/A'}</span>
+                                               </div>
+                                               <p className="text-[11px] font-medium text-slate-500 mt-1.5 flex items-center gap-1">
+                                                   <Calendar size={10} /> 
+                                                   {arr.ata && !isFuture(parseISO(arr.ata)) ? (
+                                                       <span>Arrived: <span className="text-emerald-600 font-bold">{new Date(arr.ata).toLocaleDateString()}</span> <span className="text-[10px] text-slate-400 font-normal ml-1">{getDaysRemaining(arr.ata)}</span></span>
+                                                   ) : (
+                                                       <span>ETA: <span className="text-indigo-600 font-bold">{new Date(arr.ata || arr.eta).toLocaleDateString()}</span> <span className="text-[10px] text-slate-400 font-normal ml-1">{getDaysRemaining(arr.ata || arr.eta)}</span></span>
+                                                   )}
+                                               </p>
+                                           </div>
+                                       </div>
+                                   </div>
+                               )) : <div className="p-8 text-center text-xs text-slate-400 flex flex-col items-center gap-2"><Calendar size={24} className="opacity-20"/>No upcoming arrivals</div>}
+                           </div>
+                           <div className="p-2 border-t border-slate-100 bg-slate-50 text-center">
+                               <button onClick={() => { navigateWithCheck('/calendar'); setShowCalendar(false); }} className="text-xs font-bold text-indigo-600 hover:text-indigo-800 w-full py-1 hover:bg-indigo-50 rounded transition-colors">
+                                   View Full Calendar
+                               </button>
+                           </div>
+                       </div>
+                   )}
+               </div>
 
                <div className="relative" ref={notifRef}>
                    <button onClick={() => setShowNotifications(!showNotifications)} className="text-slate-400 hover:text-indigo-600 relative p-2 bg-white rounded-full shadow-sm border border-slate-200 transition-all hover:shadow-md active:scale-95">
