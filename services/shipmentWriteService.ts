@@ -140,7 +140,7 @@ export const shipmentWriteService = {
       bl_awb: request.blAwb,
       invoice_number: request.invoiceNumber,
       tax_invoice_number: request.taxInvoiceNumber,
-      pallet_dimension: request.palletDimension,
+      pallet_dimension: request.palletDimensions ? JSON.stringify(request.palletDimensions) : null,
       requester_name: request.requester?.toUpperCase(),
       requester_email: request.requesterEmail,
       notified_approvers: request.notifiedApprovers,
@@ -363,7 +363,10 @@ export const shipmentWriteService = {
     map('containerNumber', 'container_number');
     map('invoiceNumber', 'invoice_number');
     map('taxInvoiceNumber', 'tax_invoice_number');
-    map('palletDimension', 'pallet_dimension');
+    
+    if (updates.palletDimensions !== undefined) {
+        dbUpdates.pallet_dimension = updates.palletDimensions ? JSON.stringify(updates.palletDimensions) : null;
+    }
     
     map('seaPort', 'sea_port');
     map('crdToEtd', 'crd_to_etd');

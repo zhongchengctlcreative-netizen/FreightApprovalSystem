@@ -67,7 +67,7 @@ export interface ShipmentLogistics {
   carrier?: string; // NEW field for actual carrier line (e.g. MAERSK, Evergreen)
   containerNumber?: string;
   seaPort?: string;
-  palletDimension?: string; // NEW field for LXHXW
+  palletDimensions?: string[]; // Array of LXHXW dimensions
   
   // Actual Dates
   atd?: string; // Actual Time Departure

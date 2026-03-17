@@ -140,6 +140,20 @@ export const mapRowToRequest = (row: any, overrides: any = {}): FreightRequest =
         carrierVal = inputValues.carrierLine;
     }
 
+    let parsedPallets: string[] = [];
+    if (row.pallet_dimension) {
+        try {
+            const parsed = JSON.parse(row.pallet_dimension);
+            if (Array.isArray(parsed)) {
+                parsedPallets = parsed;
+            } else {
+                parsedPallets = [row.pallet_dimension];
+            }
+        } catch (e) {
+            parsedPallets = [row.pallet_dimension];
+        }
+    }
+
     return {
         id: row.id,
         status: overrides.status || row.status,
@@ -206,7 +220,7 @@ export const mapRowToRequest = (row: any, overrides: any = {}): FreightRequest =
         blAwb: row.bl_awb,
         invoiceNumber: row.invoice_number,
         taxInvoiceNumber: row.tax_invoice_number,
-        palletDimension: row.pallet_dimension,
+        palletDimensions: parsedPallets,
         
         requester: row.requester_name?.toUpperCase(),
         requesterEmail: row.requester_email,
