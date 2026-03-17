@@ -261,7 +261,7 @@ const App: React.FC = () => {
         "ETD", "ETA", "ATD", "ATA",
         "Est. Cost (USD)", "Actual Total Cost (USD)", 
         "Origin Cost", "Freight Charge", "Dest Cost", "FOB Cost", "CH Origin Cost", "Duty Cost",
-        "Inventory Value", "Invoice Value", "Invoice No", "Tax Invoice No",
+        "Inventory Value", "Invoice Value", "Invoice No", "Tax Invoice No", "Pallet Dimensions",
         "Transit: CRD to ETD", "Transit: Origin", "Transit: Vessel", "Transit: Dest", "Warehouse Arrival", "Total Lead Time",
         "Requester"
       ];
@@ -286,7 +286,7 @@ const App: React.FC = () => {
           r.etd, r.eta, r.atd, r.ata,
           r.price, r.totalFreightCost,
           r.originCost, r.freightCharge, r.destinationCost, r.fobCost, r.chOrigin, r.dutyCost,
-          r.inventoryValue, r.invoiceValue, r.invoiceNumber, r.taxInvoiceNumber,
+          r.inventoryValue, r.invoiceValue, r.invoiceNumber, r.taxInvoiceNumber, (r.palletDimensions || []).join(' | '),
           r.crdToEtd, r.transitDayOrigin, r.transitDayVessel, r.transitDayDest, r.arrivalInWarehouse, r.totalLeadTime,
           r.requester
         ].map(escape).join(','))

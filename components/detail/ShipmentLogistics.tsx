@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { FreightRequest } from '../../types';
-import { Anchor, FileText, Container, Hash, Timer, Ship, Box, Plus, Trash2, X } from 'lucide-react';
+import { Anchor, FileText, Container, Hash, Timer, Ship, Box, Plus, Trash2, X, ExternalLink } from 'lucide-react';
 
 interface ShipmentLogisticsProps {
   request: FreightRequest;
@@ -67,8 +67,38 @@ const ShipmentLogistics: React.FC<ShipmentLogisticsProps> = ({ request, editForm
             <InfoItem label="Sea/Air Port" icon={<Anchor size={16} className="text-slate-400 flex-shrink-0" />}>{request.seaPort || 'N/A'}</InfoItem>
             <InfoItem label="Carrier Line" icon={<Ship size={16} className="text-slate-400 flex-shrink-0" />}>{request.carrier || 'N/A'}</InfoItem>
             <InfoItem label="Vessel Name" icon={<Ship size={16} className="text-slate-400 flex-shrink-0 opacity-50" />}>{request.vesselName || 'N/A'}</InfoItem>
-            <InfoItem label="BL / AWB" icon={<FileText size={16} className="text-slate-400 flex-shrink-0" />}>{request.blAwb || 'N/A'}</InfoItem>
-            <InfoItem label="Container #" icon={<Container size={16} className="text-slate-400 flex-shrink-0" />}>{request.containerNumber || 'N/A'}</InfoItem>
+            <InfoItem label="BL / AWB" icon={<FileText size={16} className="text-slate-400 flex-shrink-0" />}>
+              <div className="flex items-center justify-between w-full">
+                <span>{request.blAwb || 'N/A'}</span>
+                {request.blAwb && (
+                  <a 
+                    href={`https://www.searates.com/container/tracking?number=${request.blAwb}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-indigo-600 hover:text-indigo-800 flex items-center gap-1 text-[10px] bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded transition-colors"
+                    title="Track on SeaRates"
+                  >
+                    <ExternalLink size={10} /> Track
+                  </a>
+                )}
+              </div>
+            </InfoItem>
+            <InfoItem label="Container #" icon={<Container size={16} className="text-slate-400 flex-shrink-0" />}>
+              <div className="flex items-center justify-between w-full">
+                <span>{request.containerNumber || 'N/A'}</span>
+                {request.containerNumber && (
+                  <a 
+                    href={`https://www.searates.com/container/tracking?number=${request.containerNumber}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-indigo-600 hover:text-indigo-800 flex items-center gap-1 text-[10px] bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded transition-colors"
+                    title="Track on SeaRates"
+                  >
+                    <ExternalLink size={10} /> Track
+                  </a>
+                )}
+              </div>
+            </InfoItem>
             <InfoItem label="Invoice #" icon={<FileText size={16} className="text-slate-400 flex-shrink-0" />}>{request.invoiceNumber || 'N/A'}</InfoItem>
             <InfoItem label="Tax Invoice #" icon={<Hash size={16} className="text-slate-400 flex-shrink-0" />}>{request.taxInvoiceNumber || 'N/A'}</InfoItem>
             
