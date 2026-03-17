@@ -1,4 +1,3 @@
-
 {
   "name": "freightguard-approval-system",
   "private": true,
@@ -7,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "lint": "tsc --noEmit"
   },
   "dependencies": {
     "@emailjs/browser": "^4.4.1",
@@ -17,6 +17,7 @@
     "@tanstack/react-query": "^5.28.4",
     "@tanstack/react-virtual": "^3.5.0",
     "browser-image-compression": "^2.0.2",
+    "date-fns": "^4.1.0",
     "html2canvas": "^1.4.1",
     "jspdf": "^2.5.1",
     "leaflet": "^1.9.4",
@@ -26,6 +27,7 @@
     "react-hook-form": "^7.51.0",
     "react-router-dom": "^6.23.1",
     "recharts": "^2.12.7",
+    "xlsx": "^0.18.5",
     "zod": "^3.22.4"
   },
   "devDependencies": {

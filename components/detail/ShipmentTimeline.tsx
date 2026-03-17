@@ -2,6 +2,7 @@
 import React, { useMemo } from 'react';
 import { FreightRequest } from '../../types';
 import { Plane, Ship, Train, Truck, Clock, X } from 'lucide-react';
+import { getDaysRemaining } from '../../services/freightHelpers';
 
 interface ShipmentTimelineProps {
   request: FreightRequest;
@@ -54,7 +55,10 @@ const ShipmentTimeline: React.FC<ShipmentTimelineProps> = ({ request, editForm, 
       {isEditing ? (
         <input type="date" className="w-full text-sm bg-white border border-slate-200 rounded px-1 py-1 font-bold" value={value || ''} onChange={e => onChange(e.target.value)} />
       ) : (
-        <div className="text-sm font-semibold text-slate-700">{value ? new Date(value).toLocaleDateString() : '-'}</div>
+        <div className="text-sm font-semibold text-slate-700">
+          {value ? new Date(value).toLocaleDateString() : '-'}
+          {value && <span className="ml-1 text-xs text-slate-400 font-normal">{getDaysRemaining(value)}</span>}
+        </div>
       )}
     </div>
   );
@@ -73,11 +77,17 @@ const ShipmentTimeline: React.FC<ShipmentTimelineProps> = ({ request, editForm, 
         <div className="flex justify-between mt-12 text-xs font-medium text-slate-500">
           <div className="text-left">
             <div className="uppercase tracking-wider font-bold mb-0.5 text-indigo-700">Origin / {request.atd ? 'ATD' : 'ETD'}</div>
-            <div className="font-mono">{request.atd || request.etd || 'N/A'}</div>
+            <div className="font-mono">
+              {(request.atd || request.etd) ? new Date(request.atd || request.etd!).toLocaleDateString() : 'N/A'}
+              {(request.atd || request.etd) && <span className="ml-1 text-xs text-slate-400 font-sans font-normal">{getDaysRemaining(request.atd || request.etd)}</span>}
+            </div>
           </div>
           <div className="text-right">
             <div className="uppercase tracking-wider font-bold mb-0.5 text-pink-700">Dest / {request.ata ? 'ATA' : 'ETA'}</div>
-            <div className="font-mono">{request.ata || request.eta || 'N/A'}</div>
+            <div className="font-mono">
+              {(request.ata || request.eta) ? new Date(request.ata || request.eta!).toLocaleDateString() : 'N/A'}
+              {(request.ata || request.eta) && <span className="ml-1 text-xs text-slate-400 font-sans font-normal">{getDaysRemaining(request.ata || request.eta)}</span>}
+            </div>
           </div>
         </div>
       </div>

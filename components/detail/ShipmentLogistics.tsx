@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { FreightRequest } from '../../types';
-import { Anchor, FileText, Container, Hash, Timer, Ship } from 'lucide-react';
+import { Anchor, FileText, Container, Hash, Timer, Ship, Box } from 'lucide-react';
 
 interface ShipmentLogisticsProps {
   request: FreightRequest;
@@ -43,6 +43,7 @@ const ShipmentLogistics: React.FC<ShipmentLogisticsProps> = ({ request, editForm
             <EditItem label="Container #" icon={<Container size={16} className="text-slate-400" />}><input type="text" className="w-full px-2 py-1.5 bg-white border border-slate-300 rounded-md text-sm" value={editForm.containerNumber || ''} onChange={e => setEditForm({...editForm, containerNumber: e.target.value})} /></EditItem>
             <EditItem label="Invoice #" icon={<FileText size={16} className="text-slate-400" />}><input type="text" className="w-full px-2 py-1.5 bg-white border border-slate-300 rounded-md text-sm" value={editForm.invoiceNumber || ''} onChange={e => setEditForm({...editForm, invoiceNumber: e.target.value})} /></EditItem>
             <EditItem label="Tax Invoice #" icon={<Hash size={16} className="text-slate-400" />}><input type="text" className="w-full px-2 py-1.5 bg-white border border-slate-300 rounded-md text-sm" value={editForm.taxInvoiceNumber || ''} onChange={e => setEditForm({...editForm, taxInvoiceNumber: e.target.value})} /></EditItem>
+            <EditItem label="Palletization Dimension" icon={<Box size={16} className="text-slate-400" />}><input type="text" placeholder="L x H x W" className="w-full px-2 py-1.5 bg-white border border-slate-300 rounded-md text-sm" value={editForm.palletDimension || ''} onChange={e => setEditForm({...editForm, palletDimension: e.target.value})} /></EditItem>
           </>
         ) : (
           <>
@@ -53,6 +54,7 @@ const ShipmentLogistics: React.FC<ShipmentLogisticsProps> = ({ request, editForm
             <InfoItem label="Container #" icon={<Container size={16} className="text-slate-400 flex-shrink-0" />}>{request.containerNumber || 'N/A'}</InfoItem>
             <InfoItem label="Invoice #" icon={<FileText size={16} className="text-slate-400 flex-shrink-0" />}>{request.invoiceNumber || 'N/A'}</InfoItem>
             <InfoItem label="Tax Invoice #" icon={<Hash size={16} className="text-slate-400 flex-shrink-0" />}>{request.taxInvoiceNumber || 'N/A'}</InfoItem>
+            <InfoItem label="Palletization Dimension" icon={<Box size={16} className="text-slate-400 flex-shrink-0" />}>{request.palletDimension || 'N/A'}</InfoItem>
           </>
         )}
       </div>

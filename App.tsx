@@ -11,9 +11,11 @@ import UserManagement from './components/UserManagement';
 import LocationManagement from './components/LocationManagement';
 import ForwarderManagement from './components/CarrierManagement';
 import CostRevenuePage from './components/CostRevenuePage';
+import AirFreightCalculator from './components/AirFreightCalculator';
 import WelcomePage from './components/WelcomePage';
 import SettingsPage from './components/SettingsPage';
 import QuarterlyTrendsPage from './components/QuarterlyTrendsPage';
+import CalendarPage from './components/CalendarPage';
 import { Trash2 } from 'lucide-react';
 import { useUser } from './contexts/UserContext';
 import { useFreightData } from './hooks/useFreightData';
@@ -154,6 +156,44 @@ const App: React.FC = () => {
   // UI State for Modals
   const [deleteConfirmation, setDeleteConfirmation] = useState<{show: boolean, ids: string[]}>({ show: false, ids: [] });
   const [dataVersion, setDataVersion] = useState(0);
+  const [showRefreshPrompt, setShowRefreshPrompt] = useState(false);
+
+  // Timeout to prompt user to refresh the page (e.g., after 60 minutes)
+  useEffect(() => {
+    if (!currentUser) return;
+    
+    let timeoutId: NodeJS.Timeout;
+
+    const startTimeout = () => {
+      timeoutId = setTimeout(() => {
+        setShowRefreshPrompt(true);
+      }, 3600000); // 60 minutes
+    };
+
+    // Reset timeout on user activity
+    const resetTimeout = () => {
+      clearTimeout(timeoutId);
+      if (!showRefreshPrompt) {
+        startTimeout();
+      }
+    };
+
+    startTimeout();
+
+    // Add event listeners for user activity
+    window.addEventListener('mousemove', resetTimeout);
+    window.addEventListener('keydown', resetTimeout);
+    window.addEventListener('click', resetTimeout);
+    window.addEventListener('scroll', resetTimeout);
+
+    return () => {
+      clearTimeout(timeoutId);
+      window.removeEventListener('mousemove', resetTimeout);
+      window.removeEventListener('keydown', resetTimeout);
+      window.removeEventListener('click', resetTimeout);
+      window.removeEventListener('scroll', resetTimeout);
+    };
+  }, [currentUser, showRefreshPrompt]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -281,6 +321,7 @@ const App: React.FC = () => {
         } />
         
         <Route path="/trends" element={<QuarterlyTrendsPage dashboardData={dashboardData} />} />
+        <Route path="/calendar" element={<CalendarPage />} />
 
         <Route path="/approvals" element={
             <RequestList 
@@ -341,6 +382,7 @@ const App: React.FC = () => {
         } />
         
         <Route path="/financials" element={<CostRevenuePage />} />
+        <Route path="/calculator" element={<AirFreightCalculator />} />
         <Route path="/users" element={<UserManagement onUserUpdate={refreshUsers} currentUser={currentUser} />} />
         <Route path="/locations" element={<LocationManagement key={dataVersion} currentUser={currentUser} />} />
         <Route path="/carriers" element={<ForwarderManagement currentUser={currentUser} />} />
@@ -351,6 +393,36 @@ const App: React.FC = () => {
       </Routes>
 
       {deleteConfirmation.show && <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in"><div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden animate-fade-in-up"><div className="p-6 text-center"><div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 text-red-600"><Trash2 size={24} /></div><h3 className="text-lg font-bold text-slate-900">Confirm Deletion</h3><p className="text-sm text-slate-500 mt-2">Delete <span className="font-bold">{deleteConfirmation.ids.length}</span> records?</p><div className="flex gap-3 mt-6"><button onClick={() => setDeleteConfirmation({ show: false, ids: [] })} className="px-4 py-2 border border-slate-300 text-slate-700 font-medium rounded-lg hover:bg-slate-50 flex-1">Cancel</button><button onClick={handleDelete} className="px-4 py-2 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 flex-1">Delete</button></div></div></div></div>}
+
+      {showRefreshPrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden animate-fade-in-up">
+            <div className="p-6 text-center">
+              <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4 text-indigo-600">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21v-5h5"/></svg>
+              </div>
+              <h3 className="text-lg font-bold text-slate-900">Session Inactive</h3>
+              <p className="text-sm text-slate-500 mt-2">
+                You've been inactive for a while. Please refresh the page to ensure you have the latest data.
+              </p>
+              <div className="flex gap-3 mt-6">
+                <button 
+                  onClick={() => setShowRefreshPrompt(false)} 
+                  className="px-4 py-2 border border-slate-300 text-slate-700 font-medium rounded-lg hover:bg-slate-50 flex-1"
+                >
+                  Dismiss
+                </button>
+                <button 
+                  onClick={() => window.location.reload()} 
+                  className="px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 flex-1"
+                >
+                  Refresh Page
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 };

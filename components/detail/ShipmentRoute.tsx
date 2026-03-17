@@ -5,6 +5,7 @@ import { MapPin, Info, Copy } from 'lucide-react';
 import { destinationService, Destination } from '../../services/destinationService';
 import SearchableSelect from '../SearchableSelect';
 import { useToast } from '../../contexts/ToastContext';
+import { getDaysRemaining } from '../../services/freightHelpers';
 
 interface ShipmentRouteProps {
   request: FreightRequest;
@@ -86,14 +87,17 @@ const ShipmentRoute: React.FC<ShipmentRouteProps> = ({ request, editForm, isEdit
                     />
                   </div>
               ) : (
-                  <div className="flex items-center gap-2 text-lg font-medium text-slate-800"><MapPin size={20} className="text-indigo-500 flex-shrink-0" />{(request.origin || '').toUpperCase()}</div>
+                  <div className="flex items-center gap-2 text-lg font-medium text-slate-800"><MapPin size={20} className="text-indigo-500 flex-shrink-0" />{(request.originCode || request.origin || '').toUpperCase()}</div>
               )}
             </div>
             
             <div className="mt-4">
               <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">ETD (Departure)</p>
               <div className={`text-sm ${isEditing ? 'text-slate-700 font-semibold' : 'text-slate-500'}`}>
-                <span>{isEditing ? (editForm.etd || 'N/A') : (request.etd || 'N/A')}</span>
+                <span>
+                  {isEditing ? (editForm.etd || 'N/A') : (request.etd ? new Date(request.etd).toLocaleDateString() : 'N/A')}
+                  {!isEditing && request.etd && <span className="ml-1 text-xs text-slate-400 font-normal">{getDaysRemaining(request.etd)}</span>}
+                </span>
               </div>
             </div>
           </div>
@@ -119,14 +123,17 @@ const ShipmentRoute: React.FC<ShipmentRouteProps> = ({ request, editForm, isEdit
                     />
                   </div>
               ) : (
-                  <div className="flex items-center gap-2 text-lg font-medium text-slate-800 md:justify-end"><MapPin size={20} className="text-pink-500 flex-shrink-0" />{(request.destination || '').toUpperCase()}</div>
+                  <div className="flex items-center gap-2 text-lg font-medium text-slate-800 md:justify-end"><MapPin size={20} className="text-pink-500 flex-shrink-0" />{(request.destCode || request.destination || '').toUpperCase()}</div>
               )}
             </div>
 
             <div className="mt-4 md:text-right">
               <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">ETA (Arrival)</p>
               <div className={`text-sm flex flex-col md:items-end ${isEditing ? 'text-slate-700 font-semibold' : 'text-slate-500'}`}>
-                <span>{isEditing ? (editForm.eta || 'N/A') : (request.eta || 'N/A')}</span>
+                <span>
+                  {isEditing ? (editForm.eta || 'N/A') : (request.eta ? new Date(request.eta).toLocaleDateString() : 'N/A')}
+                  {!isEditing && request.eta && <span className="ml-1 text-xs text-slate-400 font-normal">{getDaysRemaining(request.eta)}</span>}
+                </span>
               </div>
             </div>
           </div>

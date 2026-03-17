@@ -35,6 +35,9 @@ export default defineConfig(({ mode }) => {
       versionGenerator() // Add the version generator
     ],
     base: './', // Ensures assets are loaded relatively
+    build: {
+      chunkSizeWarningLimit: 1600, // Adjust chunk size limit for warnings
+    },
     define: {
       // Explicitly expose specific variables to the client.
       // We use || '' to ensure we don't inject 'undefined' which can cause issues.

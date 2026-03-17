@@ -58,6 +58,7 @@ ALTER TABLE "public"."freight_raw_full" ADD COLUMN IF NOT EXISTS "input_exchange
 ALTER TABLE "public"."freight_raw_full" ADD COLUMN IF NOT EXISTS "duty_currency" text;
 ALTER TABLE "public"."freight_raw_full" ADD COLUMN IF NOT EXISTS "exchange_rate_date" timestamp with time zone;
 ALTER TABLE "public"."freight_raw_full" ADD COLUMN IF NOT EXISTS "input_values" jsonb DEFAULT '{}'::jsonb;
+ALTER TABLE "public"."freight_raw_full" ADD COLUMN IF NOT EXISTS "pallet_dimension" text;
 
 -- NEW: Add forwarder column
 ALTER TABLE "public"."freight_raw_full" ADD COLUMN IF NOT EXISTS "forwarder" text;

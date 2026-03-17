@@ -280,7 +280,7 @@ const ShipmentGrid: React.FC<ShipmentGridProps> = (props) => {
                             <th className="px-4 py-3 font-semibold text-slate-600 border-b border-slate-200 whitespace-nowrap bg-slate-50">Tracking Ref</th>
                         )}
                         <th className="px-4 py-3 font-semibold text-slate-600 border-b border-slate-200 whitespace-nowrap bg-slate-50">Requestor</th>
-                        <th className="px-4 py-3 font-semibold text-slate-600 border-b border-slate-200 whitespace-nowrap bg-slate-50">ETA</th>
+                        <th className="px-4 py-3 font-semibold text-slate-600 border-b border-slate-200 whitespace-nowrap bg-slate-50">ETA / ATA</th>
                         <th className="px-4 py-3 font-semibold text-slate-600 border-b border-slate-200 whitespace-nowrap text-right bg-slate-50">Total Cost (USD)</th>
                     </tr>
                     
@@ -391,7 +391,13 @@ const ShipmentGrid: React.FC<ShipmentGridProps> = (props) => {
                                             </td>
                                         )}
                                         <td className={`px-4 py-3 whitespace-nowrap text-slate-700 ${isHighlighted ? '' : 'border-b border-slate-200'}`} style={middleCellStyle}>{req.requester}</td>
-                                        <td className={`px-4 py-3 whitespace-nowrap text-slate-700 ${isHighlighted ? '' : 'border-b border-slate-200'}`} style={middleCellStyle}>{req.eta ? new Date(req.eta).toLocaleDateString() : '-'}</td>
+                                        <td className={`px-4 py-3 whitespace-nowrap text-slate-700 ${isHighlighted ? '' : 'border-b border-slate-200'}`} style={middleCellStyle}>
+                                            {req.ata ? (
+                                                <span className="text-emerald-600 font-bold" title="Actual Arrival">{new Date(req.ata).toLocaleDateString()}</span>
+                                            ) : (
+                                                req.eta ? new Date(req.eta).toLocaleDateString() : '-'
+                                            )}
+                                        </td>
                                         <td className={`px-4 py-3 whitespace-nowrap text-right ${isHighlighted ? '' : 'border-b border-slate-200'}`} style={lastCellStyle}><div className="flex flex-col items-end"><span className="font-semibold text-slate-700">{req.totalFreightCost ? `$${req.totalFreightCost.toLocaleString()}` : (req.price ? `$${req.price.toLocaleString()}` : '-')}</span>{req.totalFreightCost ? (<span className="text-[10px] font-bold text-green-600 bg-green-50 px-1.5 rounded border border-green-100 uppercase tracking-wide">Actual</span>) : req.price ? (<span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 rounded border border-amber-100 uppercase tracking-wide">Est.</span>) : null}</div></td>
                                     </tr>
                                 );

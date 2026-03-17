@@ -85,6 +85,29 @@ export const diffDays = (startStr?: string, endStr?: string): number | undefined
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
 };
 
+export const getDaysRemaining = (dateStr?: string): string => {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return '';
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  // Reset input date time to midnight for accurate day diff
+  const target = new Date(date);
+  target.setHours(0, 0, 0, 0);
+  
+  const diffTime = target.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  
+  if (diffDays === 0) return '(Today)';
+  if (diffDays === 1) return '(Tomorrow)';
+  if (diffDays === -1) return '(Yesterday)';
+  
+  if (diffDays > 0) return `(in ${diffDays} days)`;
+  return `(${Math.abs(diffDays)} days ago)`;
+};
+
 export const mapRowToRequest = (row: any, overrides: any = {}): FreightRequest => {
     const etd = row.etd ? row.etd.split('T')[0] : '';
     const atd = row.atd ? row.atd.split('T')[0] : undefined;
@@ -183,6 +206,7 @@ export const mapRowToRequest = (row: any, overrides: any = {}): FreightRequest =
         blAwb: row.bl_awb,
         invoiceNumber: row.invoice_number,
         taxInvoiceNumber: row.tax_invoice_number,
+        palletDimension: row.pallet_dimension,
         
         requester: row.requester_name?.toUpperCase(),
         requesterEmail: row.requester_email,
