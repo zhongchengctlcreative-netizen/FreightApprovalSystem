@@ -29,14 +29,16 @@ const ShipmentRoute: React.FC<ShipmentRouteProps> = ({ request, editForm, isEdit
     }
   }, [isEditing]);
 
-  const destOptions = useMemo(() => 
-    destinations.map(d => ({
-      label: d.description || d.code,
-      value: d.code,
-      subLabel: d.code,
-      original: d
-    })), [destinations]
-  );
+  const destOptions = useMemo(() => {
+    const map = new Map<string, any>();
+    destinations.forEach(d => {
+      const upperCode = d.code.toUpperCase().trim();
+      if (!map.has(upperCode)) {
+        map.set(upperCode, { label: d.description || upperCode, value: upperCode, subLabel: upperCode, original: d });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.value.localeCompare(b.value));
+  }, [destinations]);
 
   const handleCopyId = () => {
     navigator.clipboard.writeText(request.id);

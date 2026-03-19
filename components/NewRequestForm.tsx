@@ -249,9 +249,17 @@ const NewRequestForm: React.FC<NewRequestFormProps> = ({ onSubmit, onCancel, cur
     setValue('ccEmails', ccList.join(','));
   }, [ccList, setValue]);
 
-  const originOptions = useMemo(() => 
-    availableDests.map(d => ({ label: d.description || d.code, value: d.code, subLabel: d.code, original: d })), 
-  [availableDests]);
+  const originOptions = useMemo(() => {
+    // Deduplicate by uppercase code, preferring master records
+    const map = new Map<string, any>();
+    availableDests.forEach(d => {
+      const upperCode = d.code.toUpperCase().trim();
+      if (!map.has(upperCode)) {
+        map.set(upperCode, { label: d.description || upperCode, value: upperCode, subLabel: upperCode, original: d });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.value.localeCompare(b.value));
+  }, [availableDests]);
 
   const forwarderOptions = useMemo(() => 
     availableForwarders.map(c => ({ label: c.name, value: c.name, original: c })), 

@@ -83,22 +83,37 @@ export const destinationService = {
     if (updateHistorical && oldCode) {
         console.log(`[DestinationService] Updating history: ${oldCode} -> ${normalized.code}`);
         
-        // Attempt 1: Update rows that still have the OLD code (No Cascade scenario)
-        await supabase.from('freight_raw_full')
-            .update({ 
-                destination_code: normalized.code,
-                destination: normalized.description 
-            })
-            .eq('destination_code', oldCode);
+        // Fetch all distinct destination_codes and origin_codes to find exact matches ignoring case and whitespace
+        const { data: rawData } = await supabase.from('freight_raw_full').select('destination_code, origin_code');
+        
+        if (rawData) {
+            const destCodesToUpdate = Array.from(new Set(
+                rawData.map(d => d.destination_code)
+                       .filter(c => c && c.trim().toUpperCase() === oldCode.toUpperCase())
+            ));
+            
+            const originCodesToUpdate = Array.from(new Set(
+                rawData.map(d => d.origin_code)
+                       .filter(c => c && c.trim().toUpperCase() === oldCode.toUpperCase())
+            ));
 
-        // Attempt 2: Update rows that have the NEW code (Cascade scenario - just sync description)
-        // If CASCADE exists, the code was updated automatically, but description wasn't.
-        if (normalized.code !== oldCode) {
-             await supabase.from('freight_raw_full')
-            .update({ 
-                destination: normalized.description 
-            })
-            .eq('destination_code', normalized.code);
+            if (destCodesToUpdate.length > 0) {
+                const destUpdatePayload: any = { destination_code: normalized.code };
+                if (normalized.description) destUpdatePayload.destination = normalized.description;
+                
+                await supabase.from('freight_raw_full')
+                    .update(destUpdatePayload)
+                    .in('destination_code', destCodesToUpdate);
+            }
+
+            if (originCodesToUpdate.length > 0) {
+                const originUpdatePayload: any = { origin_code: normalized.code };
+                if (normalized.description) originUpdatePayload.origin = normalized.description;
+
+                await supabase.from('freight_raw_full')
+                    .update(originUpdatePayload)
+                    .in('origin_code', originCodesToUpdate);
+            }
         }
     }
   },

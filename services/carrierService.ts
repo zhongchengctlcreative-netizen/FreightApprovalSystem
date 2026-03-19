@@ -74,16 +74,43 @@ export const forwarderService = { // Renamed
     if (error) throw error;
 
     // Snapshot update logic: If name changed and flag is true, update historical data
-    if (updateHistorical && oldName && oldName !== forwarder.name) {
+    if (updateHistorical && oldName) {
        console.log(`Updating historical records from '${oldName}' to '${forwarder.name}'`);
-       const { error: historyError } = await supabase
-         .from('freight_raw_full')
-         .update({ carrier: forwarder.name }) // The column is still 'carrier'
-         .eq('carrier', oldName);
        
-       if (historyError) {
-         console.error("Failed to update historical records", historyError);
-         // We do not throw here, as the master record update was successful.
+       const { data: rawData } = await supabase.from('freight_raw_full').select('carrier, forwarder');
+       
+       if (rawData) {
+           const carrierNamesToUpdate = Array.from(new Set(
+               rawData.map(d => d.carrier)
+                      .filter(c => c && c.trim().toUpperCase() === oldName.toUpperCase())
+           ));
+           
+           const forwarderNamesToUpdate = Array.from(new Set(
+               rawData.map(d => d.forwarder)
+                      .filter(c => c && c.trim().toUpperCase() === oldName.toUpperCase())
+           ));
+
+           if (carrierNamesToUpdate.length > 0) {
+               const { error: historyError1 } = await supabase
+                 .from('freight_raw_full')
+                 .update({ carrier: forwarder.name })
+                 .in('carrier', carrierNamesToUpdate);
+               
+               if (historyError1) {
+                 console.error("Failed to update historical carrier records", historyError1);
+               }
+           }
+
+           if (forwarderNamesToUpdate.length > 0) {
+               const { error: historyError2 } = await supabase
+                 .from('freight_raw_full')
+                 .update({ forwarder: forwarder.name })
+                 .in('forwarder', forwarderNamesToUpdate);
+               
+               if (historyError2) {
+                 console.error("Failed to update historical forwarder records", historyError2);
+               }
+           }
        }
     }
   },

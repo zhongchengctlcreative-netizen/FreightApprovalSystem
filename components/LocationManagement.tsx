@@ -24,7 +24,7 @@ interface DisplayEntry {
 }
 
 const LocationManagement: React.FC<LocationManagementProps> = ({ currentUser }) => {
-  const [shipmentDests, setShipmentDests] = useState<Set<string>>(new Set());
+  const [shipmentDests, setShipmentDests] = useState<Map<string, string>>(new Map());
   const [masterDests, setMasterDests] = useState<Destination[]>([]);
   
   const [loading, setLoading] = useState(true);
@@ -45,16 +45,25 @@ const LocationManagement: React.FC<LocationManagementProps> = ({ currentUser }) 
     setLoading(true);
     try {
       const [requestsResult, destinations]: [{ requests: FreightRequest[]; totalCount: number }, Destination[]] = await Promise.all([
-        freightService.getRequests(),
+        freightService.getRequests({ pageSize: 10000 }),
         destinationService.getAll(),
       ]);
 
       const { requests } = requestsResult;
 
-      const uniqueShipmentCodes = new Set<string>();
+      const uniqueShipmentCodes = new Map<string, string>();
       requests.forEach(req => {
         if (req.destCode && req.status !== 'CANCELLED') {
-          uniqueShipmentCodes.add(req.destCode.toUpperCase().trim());
+          const code = req.destCode.trim();
+          if (!uniqueShipmentCodes.has(code.toUpperCase())) {
+            uniqueShipmentCodes.set(code.toUpperCase(), code);
+          }
+        }
+        if (req.originCode && req.status !== 'CANCELLED') {
+          const code = req.originCode.trim();
+          if (!uniqueShipmentCodes.has(code.toUpperCase())) {
+            uniqueShipmentCodes.set(code.toUpperCase(), code);
+          }
         }
       });
       
@@ -76,14 +85,16 @@ const LocationManagement: React.FC<LocationManagementProps> = ({ currentUser }) 
     const masterDestMap: Map<string, Destination> = new Map(masterDests.map((d: Destination) => [d.code.toUpperCase().trim(), d]));
     
     const allCodes = new Set<string>([
-      ...Array.from(shipmentDests as Set<string>),
+      ...Array.from(shipmentDests.keys()),
       ...Array.from(masterDestMap.keys())
     ]);
 
     const list: DisplayEntry[] = Array.from(allCodes).map(normalizedCode => {
       const master = masterDestMap.get(normalizedCode);
-      // Prefer original case from master record if available, otherwise use normalized (uppercase) code from shipment
-      const displayCode = master ? master.code : normalizedCode;
+      const shipmentOriginal = shipmentDests.get(normalizedCode);
+      
+      // Prefer original case from master record if available, otherwise use original case from shipment, fallback to normalized
+      const displayCode = master ? master.code : (shipmentOriginal || normalizedCode);
       
       return {
         id: master?.id,
@@ -161,7 +172,7 @@ const LocationManagement: React.FC<LocationManagementProps> = ({ currentUser }) 
     try {
       const destPayload: Destination = {
         id: formData.id,
-        code: formData.code.trim(), // Use trim() only, do not force uppercase
+        code: formData.code.trim().toUpperCase(),
         description: formData.description,
         region: formData.region,
         ccEmails: formData.ccEmails
@@ -310,7 +321,7 @@ const LocationManagement: React.FC<LocationManagementProps> = ({ currentUser }) 
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in"><div className="bg-white rounded-xl shadow-2xl w-full max-w-md animate-fade-in-up">
           <div className="px-6 py-4 border-b flex justify-between items-center bg-slate-50"><h2 className="text-lg font-bold text-slate-800">{editingLocation ? 'Edit Location' : 'Add New Location'}</h2><button onClick={() => setIsModalOpen(false)}><X/></button></div>
           <form onSubmit={handleSave} className="p-6 space-y-4">
-            <div><label className="text-xs font-bold uppercase">Code</label><input required autoFocus type="text" maxLength={20} className="w-full p-2 border rounded font-mono" value={formData.code} onChange={e => setFormData({...formData, code: e.target.value})} /></div>
+            <div><label className="text-xs font-bold uppercase">Code</label><input required autoFocus type="text" maxLength={20} className="w-full p-2 border rounded font-mono uppercase" value={formData.code} onChange={e => setFormData({...formData, code: e.target.value.toUpperCase()})} /></div>
             <div><label className="text-xs font-bold uppercase">Description</label><input type="text" className="w-full p-2 border rounded" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} /></div>
             <div><label className="text-xs font-bold uppercase">Region</label><select className="w-full p-2 border rounded bg-white" value={formData.region} onChange={e => setFormData({...formData, region: e.target.value})}>{REGION_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}</select></div>
             

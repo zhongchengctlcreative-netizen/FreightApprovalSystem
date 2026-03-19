@@ -616,21 +616,16 @@ const AirFreightCalculator: React.FC = () => {
   const looseChargeable = Math.max(totals.gross, totals.vol);
   const palletChargeable = Math.max(totals.palletGross, totals.palletVol);
   
-  const uniqueDestinations = Array.from(new Set(freightRates.map(r => r.destination))).sort();
-  // Also include available destinations that might not have rates yet
-  const allDestinationsForDropdown = Array.from(new Set([
-    ...uniqueDestinations,
-    ...availableDestinations.map(d => d.code)
-  ])).sort();
-
-  const destinationOptions: SelectOption[] = allDestinationsForDropdown.map(dest => {
-    const matchedDest = availableDestinations.find(d => d.code === dest || d.description === dest);
-    return {
-      label: matchedDest ? matchedDest.description || matchedDest.code : dest,
-      value: dest,
-      subLabel: matchedDest ? matchedDest.code : undefined
-    };
-  });
+  const destinationOptions: SelectOption[] = useMemo(() => {
+    const map = new Map<string, any>();
+    availableDestinations.forEach(d => {
+      const upperCode = d.code.toUpperCase().trim();
+      if (!map.has(upperCode)) {
+        map.set(upperCode, { label: d.description || upperCode, value: upperCode, subLabel: upperCode, original: d });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
+  }, [availableDestinations]);
 
   // Calculate Costs for Comparison
   const ratesForDestination = freightRates.filter(r => r.destination === selectedDestination);
