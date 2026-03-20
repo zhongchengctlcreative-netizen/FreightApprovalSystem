@@ -89,30 +89,32 @@ export const destinationService = {
         if (rawData) {
             const destCodesToUpdate = Array.from(new Set(
                 rawData.map(d => d.destination_code)
-                       .filter(c => c && c.trim().toUpperCase() === oldCode.toUpperCase())
+                       .filter(c => c && c.trim().toUpperCase() === oldCode.trim().toUpperCase())
             ));
             
             const originCodesToUpdate = Array.from(new Set(
                 rawData.map(d => d.origin_code)
-                       .filter(c => c && c.trim().toUpperCase() === oldCode.toUpperCase())
+                       .filter(c => c && c.trim().toUpperCase() === oldCode.trim().toUpperCase())
             ));
 
             if (destCodesToUpdate.length > 0) {
                 const destUpdatePayload: any = { destination_code: normalized.code };
                 if (normalized.description) destUpdatePayload.destination = normalized.description;
                 
-                await supabase.from('freight_raw_full')
+                const { error: destError } = await supabase.from('freight_raw_full')
                     .update(destUpdatePayload)
                     .in('destination_code', destCodesToUpdate);
+                if (destError) console.error("Failed to update historical destination records", destError);
             }
 
             if (originCodesToUpdate.length > 0) {
                 const originUpdatePayload: any = { origin_code: normalized.code };
                 if (normalized.description) originUpdatePayload.origin = normalized.description;
 
-                await supabase.from('freight_raw_full')
+                const { error: originError } = await supabase.from('freight_raw_full')
                     .update(originUpdatePayload)
                     .in('origin_code', originCodesToUpdate);
+                if (originError) console.error("Failed to update historical origin records", originError);
             }
         }
     }

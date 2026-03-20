@@ -264,10 +264,10 @@ export const shipmentWriteService = {
         return;
     }
     
-    // FIX: Fetch current record to merge JSONB fields correctly
+    // FIX: Fetch current record to merge JSONB fields correctly and avoid updating unchanged foreign keys
     const { data: currentRecord, error: fetchError } = await supabase
         .from('freight_raw_full')
-        .select('input_values')
+        .select('*')
         .eq('id', id)
         .single();
     
@@ -278,12 +278,18 @@ export const shipmentWriteService = {
 
     const dbUpdates: any = {};
     const map = (key: keyof FreightRequest, dbKey: string) => {
-        if (updates[key] !== undefined) dbUpdates[dbKey] = updates[key];
+        if (updates[key] !== undefined && updates[key] !== currentRecord[dbKey]) {
+            dbUpdates[dbKey] = updates[key];
+        }
     };
     
     // Correctly map UI fields to DB columns
-    if (updates.forwarder !== undefined) dbUpdates.forwarder = updates.forwarder;
-    if (updates.carrier !== undefined) dbUpdates.carrier = updates.carrier;
+    if (updates.forwarder !== undefined && updates.forwarder !== currentRecord.forwarder) {
+        dbUpdates.forwarder = updates.forwarder;
+    }
+    if (updates.carrier !== undefined && updates.carrier !== currentRecord.carrier) {
+        dbUpdates.carrier = updates.carrier;
+    }
 
     map('origin', 'origin');
     map('destination', 'destination');
@@ -295,7 +301,7 @@ export const shipmentWriteService = {
     map('inventoryValue', 'inventory_value');
     map('totalFreightCost', 'total_actual_cost');
     
-    if (updates.etd !== undefined) {
+    if (updates.etd !== undefined && updates.etd !== currentRecord.etd) {
         dbUpdates.quarter = getQuarter(updates.etd || '');
     }
 
@@ -380,7 +386,12 @@ export const shipmentWriteService = {
     map('secondApprover', 'second_approver');
     map('ccEmails', 'cc_emails');
 
-    if (updates.requester) dbUpdates.requester_name = updates.requester.toUpperCase();
+    if (updates.requester) {
+        const newRequester = updates.requester.toUpperCase();
+        if (newRequester !== currentRecord.requester_name) {
+            dbUpdates.requester_name = newRequester;
+        }
+    }
 
     const dateFields: (keyof FreightRequest)[] = ['etd', 'eta', 'atd', 'ata', 'deliveryDate'];
     const dbDateFields = ['etd', 'eta', 'atd', 'ata', 'delivery_date'];
@@ -388,17 +399,31 @@ export const shipmentWriteService = {
     dateFields.forEach((field, idx) => {
         if (updates[field] !== undefined) {
             const val = updates[field];
-            dbUpdates[dbDateFields[idx]] = (!val || val === '') ? null : val;
+            const dbVal = (!val || val === '') ? null : val;
+            if (dbVal !== currentRecord[dbDateFields[idx]]) {
+                dbUpdates[dbDateFields[idx]] = dbVal;
+            }
         }
     });
+
+    if (Object.keys(dbUpdates).length === 0) {
+        return;
+    }
 
     const { error } = await supabase.from('freight_raw_full').update(dbUpdates).eq('id', id);
 
     if (error) {
         console.error("Dynamic update failed:", JSON.stringify(error));
-        // Add user-friendly hint if the FK constraint is the issue
-        if (error.code === '23503' && error.message.includes('fk_freight_carrier_name')) {
-             throw new Error("Database Schema Error: The 'carrier' column has a bad constraint. Please go to Settings > System Configuration and click 'Update Database Views' to fix this.");
+        if (error.code === '23503') {
+            if (error.message.includes('fk_freight_carrier_name')) {
+                throw new Error("Database Schema Error: The 'carrier' column has a bad constraint. Please go to Settings > System Configuration and click 'Update Database Views' to fix this.");
+            }
+            if (error.message.includes('fk_freight_destination_code')) {
+                throw new Error("Database Schema Error: The destination code you selected is not present in the destinations table. Please ensure the code exists in Location Management.");
+            }
+            if (error.message.includes('fk_freight_origin_code')) {
+                throw new Error("Database Schema Error: The origin code you selected is not present in the destinations table. Please ensure the code exists in Location Management.");
+            }
         }
         throw error;
     }

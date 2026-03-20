@@ -82,12 +82,12 @@ export const forwarderService = { // Renamed
        if (rawData) {
            const carrierNamesToUpdate = Array.from(new Set(
                rawData.map(d => d.carrier)
-                      .filter(c => c && c.trim().toUpperCase() === oldName.toUpperCase())
+                      .filter(c => c && c.trim().toUpperCase() === oldName.trim().toUpperCase())
            ));
            
            const forwarderNamesToUpdate = Array.from(new Set(
                rawData.map(d => d.forwarder)
-                      .filter(c => c && c.trim().toUpperCase() === oldName.toUpperCase())
+                      .filter(c => c && c.trim().toUpperCase() === oldName.trim().toUpperCase())
            ));
 
            if (carrierNamesToUpdate.length > 0) {
